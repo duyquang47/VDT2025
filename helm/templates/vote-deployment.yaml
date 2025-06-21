@@ -14,10 +14,9 @@ spec:
     spec:
       containers:
         - name: vote
-          image: "{{ .Values.vote-image }}:{{ .Values.vote-tag }}"
+          image: "{{ .Values.vote.image }}:{{ .Values.vote.tag }}"
           ports:
             - containerPort: 80
           env:
             - name: REDIS_HOST
               value: redis
-              
