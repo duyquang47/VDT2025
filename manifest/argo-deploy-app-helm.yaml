@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: voting-app-from-oci
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: oci://registry-1.docker.io/quang47
+    chart: example-voting-app
+    targetRevision: 0.1.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vdt
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+# Đang lỗi oci, không kết nối với dockerhub được

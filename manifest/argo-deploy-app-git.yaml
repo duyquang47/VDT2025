@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: example-voting-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/duyquang47/VDT2025-CD.git 
+    targetRevision: HEAD
+    path: helm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vdt
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
