@@ -2,8 +2,8 @@ vote:
   image: dockersamples/examplevotingapp_vote
   tag: latest
   replicaCount: 1
-vote-image: dockersamples/examplevotingapp_vote
-vote-tag: latest
+vote-image: quang47/example-voting-app_vote:ddc3d588
+vote-tag: ddc3d588
 
 
 result:
