@@ -5,6 +5,7 @@ vote:
 vote-image: dockersamples/examplevotingapp_vote
 vote-tag: latest
 
+
 result:
   image: dockersamples/examplevotingapp_result
   tag: latest
