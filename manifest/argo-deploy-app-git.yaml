@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/duyquang47/VDT2025-CD.git 
-    targetRevision: HEAD
+    targetRevision: main
     path: helm
   destination:
     server: https://kubernetes.default.svc
