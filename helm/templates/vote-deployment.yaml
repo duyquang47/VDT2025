@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: vote
 spec:
+  revisionHistoryLimit: 3
   replicas: {{ .Values.vote.replicaCount }}
   selector:
     matchLabels:

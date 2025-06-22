@@ -2,7 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worker
-spec:
+spec: 
+  revisionHistoryLimit: 3
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
