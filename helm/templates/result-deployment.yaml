@@ -12,6 +12,12 @@ spec:
     metadata:
       labels:
         app: result
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "80"
+        prometheus.io/path: "/metrics"
+        fluentd.io/parser: "json"
+        fluentd.io/tag: "result-app"    
     spec:
       containers:
         - name: result

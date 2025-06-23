@@ -1,0 +1,43 @@
+---
+- name: Deploy Prometheus Monitoring Stack to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    prometheus_namespace: "monitoring"
+    prometheus_release_name: "prometheus-stack"
+
+  tasks:
+    - name: "1. Đảm bảo namespace '{{ prometheus_namespace }}' tồn tại"
+      kubernetes.core.k8s:
+        name: "{{ prometheus_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: "2. Thêm kho chứa Helm chart của Prometheus Community"
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: "https://prometheus-community.github.io/helm-charts"
+        state: present
+
+    - name: "3. Triển khai hoặc cập nhật kube-prometheus-stack"
+      kubernetes.core.helm:
+        name: "{{ prometheus_release_name }}"
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: "{{ prometheus_namespace }}"
+        state: present
+        wait: true
+        timeout: "10m"
+        values:
+          prometheus:
+            prometheusSpec:
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: "local-storage"
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 2Gi 
