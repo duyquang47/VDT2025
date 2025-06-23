@@ -1,0 +1,181 @@
+---
+- name: Deploy EFK Logging Stack to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    logging_namespace: "logging"
+
+  tasks:
+    - name: "1. Đảm bảo namespace '{{ logging_namespace }}' tồn tại"
+      kubernetes.core.k8s:
+        name: "{{ logging_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: "2. Thêm kho chứa Helm chart của Elastic và Fluent"
+      kubernetes.core.helm_repository:
+        name: "{{ item.name }}"
+        repo_url: "{{ item.url }}"
+        state: present
+      loop:
+        - { name: 'elastic', url: 'https://helm.elastic.co' }
+        - { name: 'fluent', url: 'https://fluent.github.io/helm-charts' }
+
+    - name: "3. Tạo Elasticsearch credentials secret"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: elasticsearch-master-credentials
+            namespace: "{{ logging_namespace }}"
+          type: Opaque
+          stringData:
+            username: elastic
+            password: elastic
+
+    - name: "4. Tạo ConfigMap fluentd-config"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: fluentd-config
+            namespace: "{{ logging_namespace }}"
+          data:
+            fluent.conf: |
+              @include /etc/fluent/fluent.conf
+
+              <source>
+                @type tail
+                @id in_tail_container_logs
+                path /var/log/containers/*.log
+                exclude_path ["/var/log/containers/*fluentd*.log"]
+                pos_file /var/log/fluentd-containers.log.pos
+                tag kubernetes.*
+                read_from_head true
+                <parse>
+                  @type cri
+                </parse>
+              </source>
+
+              <filter kubernetes.var.log.containers.**fluentd**.log>
+                @type grep
+                <exclude>
+                  key log
+                  pattern /pattern not matched/
+                </exclude>
+              </filter>
+
+              <filter kubernetes.**>
+                @type kubernetes_metadata
+                @id filter_kube_metadata
+              </filter>
+
+              <filter kubernetes.**>
+                @type parser
+                @id filter_parser_json
+                key_name log
+                reserve_data true
+                <parse>
+                  @type json
+                </parse>
+              </filter>
+
+              <match kubernetes.**>
+                @type elasticsearch
+                @id out_es
+                host "elasticsearch-master.{{ logging_namespace }}.svc.cluster.local"
+                port 9200
+                scheme http
+                user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
+                password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
+                logstash_format true
+                logstash_prefix "logstash"
+                <buffer>
+                  @type file
+                  path /var/log/fluentd-buffer
+                  flush_interval 5s
+                </buffer>
+              </match>
+
+    - name: "5. Triển khai Elasticsearch"
+      kubernetes.core.helm:
+        name: "elasticsearch"
+        chart_ref: "elastic/elasticsearch"
+        release_namespace: "{{ logging_namespace }}"
+        state: present
+        wait: true
+        timeout: "10m"
+        values:
+          replicas: 1
+          minimumMasterNodes: 1
+          volumeClaimTemplate:
+            storageClassName: "local-path"
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 10Gi
+          auth:
+            enabled: true
+            password: "elastic"
+
+    - name: "6. Chờ Elasticsearch sẵn sàng"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ logging_namespace }}"
+        label_selectors:
+          - "app=elasticsearch-master"
+      register: es_pods
+      until: "es_pods.resources | default([]) | length > 0 and es_pods.resources[0].status.phase == 'Running' and (es_pods.resources[0].status.containerStatuses | map(attribute='ready') | select('equalto', true) | list | length) == (es_pods.resources[0].status.containerStatuses | length)"
+      retries: 30
+      delay: 10
+
+    - name: "7. Triển khai Kibana"
+      kubernetes.core.helm:
+        name: "kibana"
+        chart_ref: "elastic/kibana"
+        release_namespace: "{{ logging_namespace }}"
+        state: present
+        wait: true
+        timeout: "5m"
+        values:
+          elasticsearchHosts: "http://elasticsearch-master.{{ logging_namespace }}.svc.cluster.local:9200"
+          service:
+            type: NodePort 
+
+    - name: "8. Triển khai Fluentd"
+      kubernetes.core.helm:
+        name: "fluentd"
+        chart_ref: "fluent/fluentd"
+        release_namespace: "{{ logging_namespace }}"
+        state: present
+        wait: true
+        timeout: "5m"
+        values:
+          kind: DaemonSet
+          env:
+            - name: FLUENT_ELASTICSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-master-credentials
+                  key: username
+            - name: FLUENT_ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-master-credentials
+                  key: password
+          extraVolumeMounts:
+            - name: config-volume
+              mountPath: /fluentd/etc/fluent.conf
+              subPath: fluent.conf
+          extraVolumes:
+            - name: config-volume
+              configMap:
+                name: fluentd-config
