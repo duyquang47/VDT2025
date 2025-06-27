@@ -1,10 +1,10 @@
 vote:
   image: quang47/example-voting-app_vote
-  tag: "4d7812e8"
+  tag: "4812c650"
   replicaCount: 1
 result:
   image: quang47/example-voting-app_result
-  tag: "4d7812e8"
+  tag: "4812c650"
   replicaCount: 1
 worker:
   image: dockersamples/examplevotingapp_worker
